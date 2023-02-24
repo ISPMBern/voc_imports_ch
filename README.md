@@ -1,8 +1,11 @@
 ##Title: Importation of Alpha and Delta variants during the SARS-CoV-2 epidemic in Switzerland: phylogenetic analysis and intervention scenarios
 
-$Authors:$ Martina L Reichmuth1*, Emma B Hodcroft1,2,3, Christian L Althaus1,3
-$Affiliation:$ 1 Institute of Social and Preventive Medicine, University of Bern, Bern, Switzerland; 2 Swiss Institute of Bioinformatics, Basel, Switzerland; 3 Multidisciplinary Center for Infectious Diseases, University of Bern, Bern, Switzerland 
-$Correspondence:$ *martina.reichmuth@ispm.unibe.ch
+
+$$Authors:$$ Martina L Reichmuth1*, Emma B Hodcroft1,2,3, Christian L Althaus1,3
+
+$$Affiliation:$$ 1 Institute of Social and Preventive Medicine, University of Bern, Bern, Switzerland; 2 Swiss Institute of Bioinformatics, Basel, Switzerland; 3 Multidisciplinary Center for Infectious Diseases, University of Bern, Bern, Switzerland 
+
+$$Correspondence:$$ *martina.reichmuth@ispm.unibe.ch
 
 
 ##Abstract
