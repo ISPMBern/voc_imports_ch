@@ -47,10 +47,11 @@ data
 info
 old
 
+
 # data
 *.RData
 *.zip
-
+Abstract_Conference_MReichmuth.pdf 
 # files
 *.DS_Store
 *.Rhistory
