@@ -14,18 +14,12 @@ library(doParallel)
 library(foreach)
 library(reshape2)
 library(dplyr)
-registerDoParallel(cores=10)
-getDoParWorkers()
+
 # Set seed
 set.seed(60321)
-z = as.numeric(commandArgs(trailingOnly=TRUE))
-#imports_007_stochasticity
-n_sim <- 1e5
-
-# Re (range? start voc and previous dif!)
-#R_e = (1 - p)*R_w + p*R_v
-#R_v = (1 + kappa)*R_w
-#R_w = R_e/(1 + p*kappa)
+registerDoParallel(cores=4)
+getDoParWorkers()
+n_sim <- 1e4
 
 # Generation time
 gen_mean <- 5.2 #Ganyani et al 2020; https://www.eurosurveillance.org/content/10.2807/1560-7917.ES.2020.25.17.2000257
@@ -37,144 +31,161 @@ generation <- rgamma(n_sim, shape = gamma_shape, rate = gamma_rate)
 generation <- ifelse(generation > 0, generation, rnorm(1, gen_mean, gen_sd))
 
 # dispersion
-dispersion_parameters <- as.vector(rtnorm(1e5,mean=0.51,lower=0.49,upper=0.52))#on 2021-09-18#on 2021-05-20
+dispersion_parameters <- as.vector(rtnorm(1e5,mean=0.51,lower=0.49,upper=0.52))
 dispersion_parameters <- dispersion_parameters[order(dispersion_parameters)]
 
-max_time <- 160
-
-#Swiss epidemic (FOPH)
-swiss_cov <- read.csv("swiss_cov.csv")
-
-#imports
-# Alpha imports from Emma Hodcroft
-imports_alpha <-read.csv("liberalClusters-Alpha.csv")[,-1]
-imports_alpha$MinDateSwissChildren[grepl("2020-01-05", imports_alpha$MinDateSwissChildren)] <- ("2020-12-26")
-imports_alpha$approach <- ifelse(imports_alpha$HeadOfClade!="True" & is.na(imports_alpha$Clade)| imports_alpha$HeadOfClade=="True" & !is.na(imports_alpha$Clade)  & imports_alpha$Clade>-1,"conservative", "liberal" )
-
-# Delta imports from Emma Hodcroft
-imports_delta <-read.csv("liberalClusters-Delta.csv")[,-1]
-imports_delta <- imports_delta[!grepl("2021-02-13", imports_delta$MinDateSwissChildren),]
-imports_delta$approach <- ifelse(imports_delta$HeadOfClade!="True" & is.na(imports_delta$Clade)| imports_delta$HeadOfClade=="True" & !is.na(imports_delta$Clade)  & imports_delta$Clade>-1,"conservative", "liberal" )
-
-#imports_files <- list(imports_alpha, imports_delta)
-
-#for (z in 1:6) {
-  if(z %in% c(1,2,3)){
-    imports_all <- imports_alpha
-    zi <- z
-    variant<- "Alpha"
-    beta <- 0.43
-  }
-  if(z %in% c(4,5,6)){
-    zi <- z-3
-    imports_all <- imports_delta
-    variant<- "Delta"
-    beta <- 0.53
-    
-  }
-  
-  Rv <- (1 + beta)* na.omit(swiss_cov$median_R_mean[as_date(swiss_cov$date) %in% seq(as_date(min(imports_all$MinDateSwissChildren))-3,as_date(min(imports_all$MinDateSwissChildren))+3,by=1)])
-  Rv_low <- (1 + beta)* na.omit(swiss_cov$median_R_lowHPD[as_date(swiss_cov$date) %in% seq(as_date(min(imports_all$MinDateSwissChildren))-3,as_date(min(imports_all$MinDateSwissChildren))+3,by=1)])
-  Rv_high <- (1 + beta)* na.omit(swiss_cov$median_R_highHPD[as_date(swiss_cov$date) %in% seq(as_date(min(imports_all$MinDateSwissChildren))-3,as_date(min(imports_all$MinDateSwissChildren))+3,by=1)])
-  
+Rv_low <- 1.05
+Rv_high <- 1.15
 Rv_all <- as.vector(runif(n_sim,min(Rv_low),max(Rv_high)))
 
-imports_afterfirst <- as.numeric(as_date(imports_all$MinDateSwissChildren)) - as.numeric(as_date(min(imports_all$MinDateSwissChildren)))
-imports_afterfirst <- tabulate(findInterval(imports_afterfirst, vec=seq(0,length.out=max(imports_afterfirst))), nbins=max(imports_afterfirst))
+import_scenarios <- c(1,10,100)
 
-first_import_date <- as_date(min(imports_all$MinDateSwissChildren))-7
-last_import_date <- max(as_date(imports_all$MinDateSwissChildren))-7
-length_imports <- length(first_import_date:last_import_date)
-
-
-import_t <- rep(c(1:length(imports_afterfirst)),imports_afterfirst)
-cases_d_runs <- data.frame(array(0, dim = c(max_time,1)))
-import_scenarios <- list(import_t[1],import_t[1:10],import_t[1:100])
-
-
-model_outputs <- data.frame(array(as.numeric(0), dim = c(n_sim, 7+max_time)))
-colnames(model_outputs) <- c("seeds","imports","Re","dispersion_parameter","-","cum_cases","final_incidence", 1:max_time)
-
-
-
-stoch_imports <- function(Re, dispersion, imports){
-  #Ri <- Re #<- Rv
-  #for(Ri in (1:length(Re))){
-    #print(i)
-  #foreach(i=1:length(import_t)) %dopar% {#foreach(Ri=1:length(Re)) %dopar% {
-  foreach(Ri=1:length(Re)) %dopar% {#lapply(Re,function(R) {
-  
+stoch_imports <- function(Re, dispersion, import){
+  cases_time <- c()
+  foreach(Ri=1:length(Re)) %dopar% {
     R <- Re[Ri]
-    secondary_t <- imports#import_t[1:i]#import_scenarios[[zi]]#
-    #R <- Re[Ri]
+    cases_time <-secondary_t <- rep(1,import)
     k <- sample(dispersion, size=1)
-    cases_d_runs[,1] <- tabulate(findInterval(imports, vec=seq(1,length.out=max(imports_afterfirst))), nbins=max_time)
-    
-    while(length(secondary_t<max_time+0.5) >0 & sum(cases_d_runs[,1])<1e7) {
+    secondary <- 1
+    while(length(cases_time)<1e5 & sum(secondary>0)>0) {#sum(secondary_t<max_time+0.5) >0 
       secondary <- rnbinom(length(secondary_t), size = k, mu = R)
+      if(sum(secondary>0)>0){
       secondary_t <- rep(secondary_t, secondary)
-      
       secondary_t <- secondary_t + round(rgamma(length(secondary_t), shape = gamma_shape, rate = gamma_rate))
-      secondary_t <- secondary_t[secondary_t<max_time+0.5]
-      cases_d_runs[match(names(table(secondary_t[secondary_t>0&secondary_t<(max_time+0.5)])),rownames(cases_d_runs)),1] <-  cases_d_runs[match(names(table(secondary_t[secondary_t>0&secondary_t<(max_time+0.5)])),rownames(cases_d_runs)),1] + table(secondary_t[secondary_t>0&secondary_t<(max_time+0.5)])
+      cases_time <- c(cases_time,secondary_t)
+      }
     }
-    model_outputs[Ri,]<- c(length(import_scenarios[[zi]]),length(import_scenarios[[zi]]),R,k,NA,sum(cases_d_runs),cases_d_runs[max_time,1], cases_d_runs[,1])
-    #rm(cases_d_runs)
-    return(model_outputs[Ri,])
-    }#)
-}
-
-model_outputs <- stoch_imports(Rv_all, dispersion_parameters, import_scenarios[[zi]])
-model_outputs <- as.data.frame(do.call(rbind, lapply(model_outputs, `length<-`, max(lengths(model_outputs)))))
-
-model_outputs$variant <- variant
-
-# account for variation due to stochasticity
-colnames(model_outputs)[is.na(colnames(model_outputs))] <- c(1:max_time)
-models_output_num <- as.data.frame(t(model_outputs[,c(8:(length(model_outputs)-1))]))
-models_output_num$date <- c(1:max_time)
-models_output_num<- melt(models_output_num, id.vars=c("date"))
-models_output_num$variant <- variant
-models_output_num$seeds <- unique(model_outputs[,1])
-
-models_output_num$time <- models_output_num$date
-models_output_num$date <-  models_output_num$date+as_date(first_import_date)
-
-models_output_num[,c("variable","cum_inc")]<- models_output_num %>% group_by(variable) %>% summarise(cum_inc=cumsum(value))
-max_cumincidence_perseed<- models_output_num %>% group_by(seeds) %>% summarise(max_cumincidence_perseed = max(cum_inc))
-variance_outputs <- data.frame(array(NA, dim = c(sum(max_cumincidence_perseed$max_cumincidence_perseed)+3, 5)))
-colnames(variance_outputs) <- c("value","variance","sd","range", "seeds")
-
-#for(k in 1:3){
-  i <- c(1,10,100)[zi]
-  subset_variance_outputs <- models_output_num[models_output_num$seeds==i,]
-  #l <- sum(max_cumincidence_perseed$max_cumincidence_perseed[0:(k -1)])
-  for(j in sort(as.numeric(unique(subset_variance_outputs$cum_inc)))){
-    #s<- sort(as.numeric(unique(subset_variance_outputs$cum_inc)))[j]
-    time_j<- subset_variance_outputs[subset_variance_outputs$cum_inc%in%j,]
-    time_j <- time_j$time[!duplicated(time_j$variable)]
-    time_j<- time_j - min(time_j)
-    variance_outputs$variance[j] <- var(time_j)
-    variance_outputs$sd[j] <- sd(time_j)
-    variance_outputs$range[j] <- max(time_j)
-    variance_outputs$value[j] <- j
-    variance_outputs$seeds[j] <- i
+    model_outputs<- c(import,R,k,length(cases_time),cases_time)
+    return(model_outputs)
   }
-#}
-
-variance_outputs<- variance_outputs[variance_outputs$seeds!=0,]
-variance_outputs<- variance_outputs[!is.na(variance_outputs$seeds),]
-
-
-if(z %in% c(1,2,3)){
-saveRDS(model_outputs, paste0("import_voc_alpha_105_",zi,"_",Sys.Date(),".rds"))
-write.csv(variance_outputs, paste0("import_variance_voc_alpha_105_",zi,"_",Sys.Date(),".csv"))
-}
-if(z %in% c(4,5,6)){
-  saveRDS(model_outputs, paste0("import_voc_delta_105_",zi,"_",Sys.Date(),".rds"))
-  write.csv(variance_outputs, paste0("import_variance_voc_delta_105_",zi,"_",Sys.Date(),".csv"))
 }
 
-#}
+model_outputs <- c()
+model_outputs <- lapply(1:length(import_scenarios), function(x) stoch_imports(Rv_all, dispersion_parameters, import_scenarios[x]))
+model_outputs <- unlist(model_outputs, recursive = FALSE)
+models_output_inc<- lapply(1:length(model_outputs), function(x) tabulate(as.numeric(model_outputs[[x]][-c(1:4)])))
+models_output_cuminc <- lapply(1:length(models_output_inc), function(x) cumsum(models_output_inc[[x]]))
+
+
+stochastic_model_outputs_variation <- c()
+stochastic_model_outputs_variation <- data.frame(array(NA, dim = c(0, 6)))
+
+for(i in 1:3){
+  output_cuminc <- models_output_cuminc[((i-1)*n_sim+1):(i*n_sim)]
+  output_inc <- models_output_inc[((i-1)*n_sim+1):(i*n_sim)]
+  cum_inc <- sort(unique(unlist(output_cuminc)))
+  cum_inc <- cum_inc[cum_inc<=5*1e3]
+  output_cuminc <- as.data.frame(do.call(cbind, lapply(output_cuminc, `length<-`, max(lengths(output_cuminc)))))
+  output_inc <- as.data.frame(do.call(cbind, lapply(output_inc, `length<-`, max(lengths(output_cuminc)))))
+ 
+  output_cuminc$date <- c(1:length(output_cuminc[,1]))
+  output_cuminc<- melt(output_cuminc, id.vars=c("date"))
+  
+  output_inc$date <- c(1:length(output_inc[,1]))
+  output_inc<- melt(output_inc, id.vars=c("date"))
+  output_cuminc<- cbind(output_cuminc, output_inc)
+  output_cuminc <- output_cuminc[!output_cuminc[,6] %in% 0,]
+  
+  output_cuminc <- output_cuminc[!is.na(output_cuminc$value),]
+  output_cuminc <- output_cuminc[,1:3]
+  
+  variation_outputs_range <-sapply(cum_inc, function(j) sum(diff(sort(output_cuminc$date[output_cuminc$value %in% j]))))
+  variation_outputs_sd <-sapply(cum_inc, function(j) sd(output_cuminc$date[output_cuminc$value %in% j]))
+  variation_outputs_mean <-sapply(cum_inc, function(j) mean(output_cuminc$date[output_cuminc$value %in% j]))
+   variation_outputs_num <-sapply(cum_inc, function(j) sum(output_cuminc$value %in% j))
+  
+  variation_outputs <- as.data.frame(cbind(variation_outputs_range,variation_outputs_mean, variation_outputs_sd,cum_inc,variation_outputs_num))
+  variation_outputs$seeds <- import_scenarios[i]
+  colnames(stochastic_model_outputs_variation) <- colnames(variation_outputs) <- c("range","mean", "sd", "value","num_sim", "seeds")
+  
+  stochastic_model_outputs_variation <- rbind(variation_outputs,stochastic_model_outputs_variation)
+}
+
+days_max_plot<- 150
+days_min_plot <- 20
+for (i in 1:3) {
+  output_inc <- models_output_inc[((i-1)*n_sim+1):(i*n_sim)]
+  output_inc <- as.data.frame(do.call(rbind, lapply(output_inc, `length<-`, max(lengths(output_inc)))))
+  output_inc$date <- c(1:length(output_inc[,1]))
+  max_time<- length(output_inc)
+  models_output_CI <- data.frame(array(as.numeric(0), dim = c(max_time, 6)))
+  for(n in 1:max_time){
+    models_output_CI[n,2:6] <- quantile(as.numeric(na.omit(output_inc[,n])), probs = c(.025,.25,.5,.75,.975))
+    models_output_CI[n,7] <- length(na.omit(output_inc[,n]))
+    
+    }
+  models_output_CI[,1] <- c(1:max_time)
+  colnames(models_output_CI) <- c("date","low_95","low_50","median","up_50","up_95", "num_sim")
+  if(i==1){col_l <- col_9[2]}
+  if(i==2){col_l <- col_9[3]}
+  if(i==3){col_l <- col_9[4]}
+  max_yaxis <-400
+  incidence_seeds_plot <- ggplot()+
+    theme_minimal()+
+    scale_y_continuous(labels = yscaling_log)+
+    geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_95,ymax=up_95), fill=col_l, alpha=0.4)+
+    geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_50,ymax=up_50), fill=col_l, alpha=0.4)+
+    geom_line(data=models_output_CI, aes( x=(date), y=median), col=col_l)+#[models_output$variable%in%c(20001:20011),]
+    theme(legend.position="none")+
+    geom_hline(yintercept=3500, linetype="dashed", color = col_9[5])+
+    coord_cartesian(ylim = c(1, max_yaxis),xlim = c(days_min_plot,days_max_plot)) +
+    labs( x = "Time (in days)", y =bquote("Incidence"))
+  if(i==1){incidence_seeds1_plot <- incidence_seeds_plot+ labs(tab="1 import")}
+  if(i==2){incidence_seeds10_plot <- incidence_seeds_plot+ labs(tab="10 imports")}
+  if(i==3){incidence_seeds100_plot <- incidence_seeds_plot+ labs(tab="100 imports")}
+}
+for (i in 1:3) {
+  output_inc <- models_output_cuminc[((i-1)*n_sim+1):(i*n_sim)]
+  output_inc <- as.data.frame(do.call(rbind, lapply(output_inc, `length<-`, max(lengths(output_inc)))))
+  output_inc$date <- c(1:length(output_inc[,1]))
+  max_time<- length(output_inc)
+  models_output_CI <- data.frame(array(as.numeric(0), dim = c(max_time, 6)))
+  for(n in 1:max_time){
+    models_output_CI[n,2:6] <- quantile(as.numeric(na.omit(output_inc[,n])), probs = c(.025,.25,.5,.75,.975))
+  }
+  models_output_CI[,1] <- c(1:max_time)
+  colnames(models_output_CI) <- c("date","low_95","low_50","median","up_50","up_95")
+  if(i==1){col_l <- col_9[2]}
+  if(i==2){col_l <- col_9[3]}
+  if(i==3){col_l <- col_9[4]}
+  max_yaxis <-5000
+  cumincidence_seeds_plot <- ggplot()+
+    theme_minimal()+
+    scale_y_continuous(labels = yscaling_log)+
+    geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_95,ymax=up_95), fill=col_l, alpha=0.4)+
+    geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_50,ymax=up_50), fill=col_l, alpha=0.4)+
+    geom_line(data=models_output_CI, aes( x=(date), y=median), col=col_l)+#[models_output$variable%in%c(20001:20011),]
+    theme(legend.position="none")+
+    coord_cartesian(ylim = c(1, max_yaxis),xlim = c(days_min_plot,days_max_plot)) +
+    labs( x = "Time (in days)", y =bquote("Cumulative incidence"))
+  if(i==1){incidence_seeds1_plot <- cumincidence_seeds_plot+ labs(tab="1 import")}
+  if(i==2){incidence_seeds10_plot <- cumincidence_seeds_plot+ labs(tab="10 imports")}
+  if(i==3){incidence_seeds100_plot <- cumincidence_seeds_plot+ labs(tab="100 imports")}
+}
+stochastic_model_outputs_variation$seeds <-  factor(stochastic_model_outputs_variation$seeds, levels=c("1", "10", "100"))
+variation_cumincidence_sd <- ggplot()+
+  theme_minimal()+
+  geom_point(data=stochastic_model_outputs_variation, aes( x=(value), y=(sd), color=as.character(seeds), group=as.character(seeds)),alpha=0.3)+
+  geom_vline(xintercept=3500, linetype="dashed", color = col_9[5])+
+  coord_cartesian(ylim = c(days_min_plot,days_max_plot)) +
+  scale_color_manual(name="Number of imports",
+                     values = (col_9[2:4]),
+                     labels = c("1", "10", "100"))+
+  labs( x = "Cumulative incidence", y =bquote("Variation in days (sd)"))
+
+variation_cumincidence_range <- ggplot()+
+  theme_minimal()+
+  geom_point(data=stochastic_model_outputs_variation, aes( x=(value), y=(range), color=as.character(seeds), group=as.character(seeds)),alpha=0.3)+
+  geom_vline(xintercept=3500, linetype="dashed", color = col_9[5])+
+  scale_color_manual(name="Number of imports",
+                     values = (col_9[2:4]),
+                     labels = c("1", "10", "100"))+
+  labs( x = "Cumulative incidence", y =bquote("Variation in days (range)"))
+
+
+stochastic_seeds_plot <- ggarrange(incidence_seeds_plot, cumincidence_seeds_plot,variation_cumincidence_sd,variation_cumincidence_range,
+                                     ncol = 1, nrow = 4,labels = c("A","B","C", "D"))
+ggsave(stochastic_seeds_plot, filename = paste0("./data/figures/Figure5_",format(Sys.time(), "%Y-%m-%d"), ".png"), height =16, width = 10,  bg = "transparent")
+
 
 

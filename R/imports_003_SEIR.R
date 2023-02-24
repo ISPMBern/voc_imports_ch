@@ -27,7 +27,6 @@ imports_003_SEIR <- function(imports, variant){ # variant == "alpha" or "delta"
   ascertainment <- 0.5
   introduction <- 0
   names(parameters)[names(parameters) == variant] <- 'variant_advantage'
-  #init_cases <- wt_cases/ascertainment*(1/as.numeric(unname(parameters["gamma"]))+1/as.numeric(unname(parameters["zeta"]))) #cases/ascertainment  *incubation time+ time to test
   init_tested <- round(wt_cases/as.numeric(unname(parameters["zeta"])))
   init_cases <- round(wt_cases/(ascertainment*as.numeric(unname(parameters["gamma"])))) #cases/ascertainment  *incubation time+ time to test
   
@@ -54,7 +53,7 @@ imports_003_SEIR <- function(imports, variant){ # variant == "alpha" or "delta"
         omega <- imports[pmax(1,ceiling(t))]
         beta1 <- as.numeric(R[pmax(1,ceiling(t))])/(1 + p*variant_advantage)*gamma/S 
         beta2 <- as.numeric(R[pmax(1,ceiling(t))])*(1 + variant_advantage)/(1 + p*variant_advantage)*gamma/S#R[round(t)]
-        dS <- - beta1*S*I1 - beta2*S*I2
+        dS <- - beta1*S*I1 - beta2*S*I2 - omega
         dE1 <- beta1*S*I1 - sigma*E1
         dE2 <- beta2*S*I2 - sigma*E2 + omega
         dI1 <- sigma*E1 - gamma*I1
@@ -63,7 +62,7 @@ imports_003_SEIR <- function(imports, variant){ # variant == "alpha" or "delta"
         dC2 <-  gamma*I2 *ascertainment - zeta*C2# got tested after being infectious, e.g., zeta = 1/2, ascertainment 50%
         dT1 <- zeta*C1
         dT2 <- zeta*C2
-        dR1 <- gamma*I1*(1-ascertainment)+zeta*C1 - omega
+        dR1 <- gamma*I1*(1-ascertainment)+zeta*C1# - omega
         dR2 <- gamma*I2*(1-ascertainment)+zeta*C2
         dImports <- omega
         der <- c(dS, dE1, dE2, dI1, dI2, dC1, dC2,dT1, dT2,dR1, dR2,dImports)
