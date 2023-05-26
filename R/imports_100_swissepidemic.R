@@ -1,11 +1,14 @@
 #' ---
 #' title: Imports and the Swiss SARS-CoV-2 Epidemic
-#' subtitle: data loading and decriptive part
+#' subtitle: data loading and descriptive part
 #' author: "Martina Reichmuth"
 #' date: "'01/12/2021"
 #' ---
 
-
+path_name <- rstudioapi::getSourceEditorContext()$path
+path_name <- gsub("R/imports_100_swissepidemic.R","",path_name)
+setwd(path_name)
+source(paste0(path_name,"R/imports_000_initialize.R"))
 
 
 ## Swiss surveillance of SARS-CoV-2 meta-data (reported by Federal Office of Public Health):
@@ -13,6 +16,7 @@ url <- readLines("https://www.covid19.admin.ch/api/data/context", warn=FALSE)
 url <- gsub("^(.*)https:", "https:", url[20])
 url <- gsub("\"", "",url)
 url <- gsub(",", "",url)
+options(timeout=300)
 download(url, dest=paste0("covid19_bag_", Sys.Date(),".zip"), mode="wb") 
 unzip(paste0("covid19_bag_", Sys.Date(),".zip"), exdir = "./temp_data")
 
@@ -24,53 +28,19 @@ cantons_ch <- c("CH", "AG","AI","AR","BE","BL","BS","FR","GE",
                 "SO","SZ","TG",  "TI","UR","VD","VS","ZG","ZH")
 swiss_cov_metadata <- swiss_cov_metadata[swiss_cov_metadata$geoRegio %in% cantons_ch,]
 
-swiss_cov_tests <- read.csv("./temp_data/data/COVID19Test_geoRegion_PCR_Antigen.csv")
-colnames(swiss_cov_tests)[1] <- "date"
-swiss_cov_tests <- swiss_cov_tests[swiss_cov_tests$geoRegio %in% cantons_ch,]
-
-swiss_cov_tests_pcr <- swiss_cov_tests[swiss_cov_tests$nachweismethode=="PCR",]
-colnames(swiss_cov_tests_pcr)[2] <- "pcrtests_num"
-colnames(swiss_cov_tests_pcr)[3] <- "pcrtests_pos_num"
-
-swiss_cov_tests_antig <- swiss_cov_tests[swiss_cov_tests$nachweismethode=="Antigen_Schnelltest",]
-colnames(swiss_cov_tests_antig)[2] <- "antigtests_num"
-colnames(swiss_cov_tests_antig)[3] <- "antigtests_pos_num"
-geoR <- grep("geoRegion",colnames(swiss_cov_tests))
-swiss_cov_tests <- merge(swiss_cov_tests_antig[,c(1,2,3,geoR)], swiss_cov_tests_pcr[,c(1,2,3,geoR)],by=c("date","geoRegion"), all=TRUE )
-swiss_cov_tests<- swiss_cov_tests %>% 
-  rowwise() %>% #rowwise will make sure the sum operation will occur on each row
-  mutate(tests_num = sum(antigtests_num,pcrtests_num, na.rm=TRUE))%>% 
-  mutate(tests_pos_num = sum(antigtests_pos_num,pcrtests_pos_num, na.rm=TRUE))
-swiss_cov_tests[is.na(swiss_cov_tests)] <- 0
-
 swiss_cov_Re <- read.csv("./temp_data/data/COVID19Re_geoRegion.csv")
 swiss_cov_Re <- swiss_cov_Re[swiss_cov_Re$geoRegio %in% cantons_ch,]
 swiss_cov <- c()
-swiss_cov <- merge(swiss_cov_metadata[,c("date","geoRegion","cases_num", "pop")], swiss_cov_tests[,c("date","geoRegion","tests_num", "tests_pos_num")],by=c("date","geoRegion"), all=TRUE )
-swiss_cov <- merge(swiss_cov, swiss_cov_Re[,c("date","geoRegion", "median_R_mean", "median_R_highHPD", "median_R_lowHPD")],by=c("date","geoRegion"), all=TRUE )
+swiss_cov <- merge(swiss_cov_metadata, swiss_cov_Re[,c("date","geoRegion", "median_R_mean", "median_R_highHPD", "median_R_lowHPD")],by=c("date","geoRegion"), all=TRUE )
 swiss_cov <- swiss_cov[!is.na(swiss_cov$cases_num),]
 swiss_cov$date <- as_date(swiss_cov$date)
 swiss_cov <- as.data.frame(swiss_cov)
 swiss_cov <- swiss_cov[swiss_cov$geoRegion=="CH",]
 
-swiss_cov$week <- week(swiss_cov$date)
-swiss_cov$week <-sprintf("%02d",swiss_cov$week)
-swiss_cov$week <- paste0(year(swiss_cov$date), swiss_cov$week)
-swiss_cov_week <- as.data.frame(swiss_cov  %>% group_by(week, geoRegion)%>% 
-                                  summarise(pop = unique(pop),
-                                            tests_num = sum(tests_num),
-                                            tests_pos_num = sum(tests_pos_num),
-                                            median_R_mean = median(median_R_mean),
-                                            median_R_highHPD = median(median_R_highHPD),
-                                            median_R_lowHPD = median(median_R_lowHPD)))
-
 unlink("temp_data", recursive = TRUE)
 unlink(paste0("covid19_bag_", Sys.Date(),".zip"), recursive = TRUE)
 remove(swiss_cov_metadata)
-remove(swiss_cov_tests)
 remove(swiss_cov_Re)
-remove(swiss_cov_tests_antig)
-remove(swiss_cov_tests_pcr)
 
 ## KOF stringency, gives information about the measures in place
 KOF <- read.csv(paste0("https://datenservice.kof.ethz.ch/api/v1/public/sets/stringency_plus_web?mime=csv&df=Y-m-d.csv"))
@@ -83,8 +53,6 @@ seroprevalence_ch$date <- as_date(seroprevalence_ch$date)
 
 
 ## Swiss surveillance of SARS-CoV-2 sequencing meta-data (reported by ETH Zurich):
-#url <- GET("https://cov-spectrum.ethz.ch/gisaid/api/v1/sample/aggregated?country=Switzerland&fields=date,division,pangoLineage")#Used since 17 Nov 2021
-#url <- GET("https://cov-spectrum.ethz.ch/gisaid/api/v1/sample/aggregated?country=Switzerland&fields=date,division,pangoLineage&accessKey=9Cb3CqmrFnVjO3XCxQLO6gUnKPd")#Used since 17 Nov 2021
 url <- GET("https://lapis.cov-spectrum.org/open/v1/sample/aggregated?country=Switzerland&fields=date,division,pangoLineage")#Used since Oct 2022
 jsonRespParsed<- content(url,as="parsed", encoding="UTF-8") 
 seq_ch <- jsonRespParsed%>%bind_rows#%>%select(date,division,pangolinLineage)# %>%subset(.,country %in% "Switzerland") #%>%
@@ -105,8 +73,8 @@ seq_ch <- seq_ch[!is.na(seq_ch$date),]
 seq_ch <- seq_ch[order(seq_ch$date),]
 seq_ch <- seq_ch[!(grepl("Delta", seq_ch$who_variants)&grepl(as_date("2021-02-13"), seq_ch$date)),]#misclassified Delta
 
-seq_ch$value <- 1
-seq_ch_date  <- aggregate(seq_ch["value"], by=seq_ch["date"], sum)
+seq_ch$num_seq_variant <- 1
+seq_ch_date  <- aggregate(seq_ch["num_seq_variant"], by=seq_ch["date"], sum)
 colnames(seq_ch_date)[2] <- "num_seq"
 swiss_cov <- merge(swiss_cov, seq_ch_date, by="date", all.x = TRUE)
 for(i in 1:length(swiss_cov$date)){
@@ -175,12 +143,12 @@ for (n in c("Alpha","Delta")) {
     delta_ch <- variant_data
   }
 }
-write.csv(swiss_cov, paste0("swiss_cov",Sys.Date(),".csv"))
+write.csv(swiss_cov, paste0("./data/swiss_cov.csv"))
 
 cov_ch <- subset(swiss_cov, as_date(date) %in% seq(min(alpha_ch$date),max(delta_ch$date),1))
 variant_data <- subset(seq_ch, as_date(date) %in% seq(min(alpha_ch$date),max(delta_ch$date),1))
 
-variants_melt  <- aggregate(seq_ch["value"], by=seq_ch[c("date", "who_variants")], sum)
+variants_melt  <- aggregate(seq_ch["num_seq_variant"], by=seq_ch[c("date", "who_variants")], sum)
 colnames(variants_melt)[3] <- "num_seq_variant"
 variants_melt$who_variants <- factor(variants_melt$who_variants, levels = lev)
 
@@ -193,15 +161,14 @@ period <- seq(min(variant_data$date),max(variant_data$date),1)
 # Figure 3 (and Sup Fig 1) (overview of the Swiss epidemic)
 col_9 <- (brewer.pal(9,"Set1"))
 col_variants <- c("#fc8d62", "#8da0cb", "#5e5e5d")
-col_alpha <- c("#fcbda4", "#fc8d62", "#94533a")
-col_delta <- c("#a9b5cf", "#8da0cb", "#5f6b87")
+
 
 # level data
 variants_melt$who_variants <- factor(variants_melt$who_variants, levels = lev)
 seq_ch$who_variants <- factor(seq_ch$who_variants, levels = lev)
 
 # color cases due to sequencing (proportion of variants)
-variants_extra <- aggregate(seq_ch["value"], by=seq_ch[c("date", "who_variants")], sum)
+variants_extra <- aggregate(seq_ch["num_seq_variant"], by=seq_ch[c("date", "who_variants")], sum)
 variants_extra <- merge(swiss_cov[,c("weigthed_cases", "date")], variants_extra, by="date",all=TRUE)
 variants_extra <- merge(seq_ch_date, variants_extra, by="date",y.all=TRUE)
 variants_extra$who_variants <- factor(variants_extra$who_variants, levels = lev)
@@ -212,17 +179,14 @@ cov_ch_plot <- ggplot(data = variants_extra, aes(x = date, y = num_variant_extra
   scale_y_continuous(limits = c(0,1e4))+
   scale_x_date(date_breaks = "1 month", 
                date_labels = "%b", limits = c(time_window_plots[1],time_window_plots[2]))+
-  scale_fill_manual(values= col_variants,name="") +#SARS-CoV-2 variants
-  scale_color_manual(values= col_variants,name="") +#SARS-CoV-2 variants
+  scale_fill_manual(values= col_variants,name="") +
+  scale_color_manual(values= col_variants,name="") +
   theme_minimal()+
   theme(legend.position=c(.4,.9),legend.direction="horizontal")+
   labs(tag=bquote(.("")),subtitle = "", x = "", y =bquote("Number of reported \nSARS-CoV-2 cases"))
-ggsave(cov_ch_plot, filename = paste0("./data/figures/cases_num_",format(Sys.time(), "%Y-%m-%d"), ".png"), height = 2, width = 5,  bg = "transparent")
 
 
-#key data 
 #NPI
-#https://de.wikipedia.org/wiki/COVID-19-Pandemie_in_der_Schweiz (Access: 2021-05-04)
 #https://www.bag.admin.ch/bag/en/home/krankheiten/ausbrueche-epidemien-pandemien/aktuelle-ausbrueche-epidemien/novel-cov/massnahmen-des-bundes.html (Access: 2021-07-19)
 kof_plot <- ggplot(data= kof_ch)+
   theme_minimal()+
@@ -295,24 +259,22 @@ seq_variants_plot <- ggplot()+
   theme_minimal()+
   theme(legend.position=c(.35,.8),legend.direction="horizontal")+
   scale_y_continuous(limits = c(0,max(variants_melt$num_seq)))+
-  scale_fill_manual(values= col_variants,name="") +#SARS-CoV-2 variants
-  scale_color_manual(values= col_variants,name="") +#SARS-CoV-2 variants
+  scale_fill_manual(values= col_variants,name="") +
+  scale_color_manual(values= col_variants,name="") +
   labs(tag=bquote(.("")),subtitle = "", x = "", y =bquote("Number of sequenced \nSARS-CoV-2"))
-ggsave(seq_variants_plot, filename = paste0("./data/figures/sequences_num_col_",format(Sys.time(), "%Y-%m-%d"), ".png"), height = 2, width = 5,  bg = "transparent")
 
 
 plot_overview_ch <- NULL
 plot_overview_ch <- ggarrange(kof_plot,proportion_sequenced_plot,seq_variants_plot,
                               labels = c("A", "B", "C"),
                               ncol = 1, nrow = 3)
-ggsave(plot_overview_ch, filename = paste0("./data/figures/SF1_",format(Sys.time(), "%Y-%m-%d"), ".png"), height =8, width = 5,  bg = "transparent")
+ggsave(plot_overview_ch, filename = paste0("./data/figures/SF1.png"), height =8, width = 5,  bg = "transparent")
 
 plot_overview_ch <- ggarrange(cov_ch_plot, re_plot,
                               labels = c("A", "B"),
                               ncol = 1, nrow = 2)
-ggsave(plot_overview_ch, filename = paste0("./data/figures/Figure3_",format(Sys.time(), "%Y-%m-%d"), ".pdf"), height =6, width = 5,  bg = "transparent")
-ggsave(plot_overview_ch, filename = paste0("./data/figures/Figure3_",format(Sys.time(), "%Y-%m-%d"), ".png"), height =6, width = 5,  bg = "transparent")
-ggsave(plot_overview_ch, filename = paste0("./data/figures/Figure3_",format(Sys.time(), "%Y-%m-%d")), height =6, width = 5,  bg = "transparent",device='tiff', dpi=700)
+ggsave(plot_overview_ch, filename = paste0("./data/figures/Figure3.pdf"), height =6, width = 5,  bg = "transparent")
+ggsave(plot_overview_ch, filename = paste0("./data/figures/Figure3.png"), height =6, width = 5,  bg = "transparent")
 
 
 

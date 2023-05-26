@@ -8,12 +8,14 @@
 parameters_output <-c()
 for (n in 1:2) {
   if(n==1){
+    variant_data1 <- alpha_ch
     # only data where first time >75% of variant
     variant_data <- alpha_ch[alpha_ch$date %in% seq(min(alpha_ch$date),min(alpha_ch$date[alpha_ch$proportion>0.75]),1),]
     variant_name <- "Alpha"
     time_window_Re <- as_date(c("2020-11-01", "2021-01-31")) # early growth phase of the variant: November 2020 to 31 January 2021; range: (0.8-0.98)
   }
   if(n==2){
+    variant_data1 <- delta_ch
     # only data where first time >75% of variant
     variant_data <- delta_ch[delta_ch$date %in% seq(min(delta_ch$date),min(delta_ch$date[delta_ch$proportion>0.75]),1),]
     variant_name <- "Delta" 
@@ -23,7 +25,7 @@ for (n in 1:2) {
   
   cov_ch <- subset(swiss_cov, as_date(date) %in% seq(min(variant_data$date),max(variant_data$date),1))
   time_window <- c(min(variant_data$date),max(variant_data$date))
-  time_window1 <- c(min(variant_data1$date),max(variant_data1$date))
+  time_window1 <- c(min(variant_data$date),max(variant_data$date))
   ## Sample size for parameter sets and bootstrapping
   n_sim <- 1e4
   # Generation time
@@ -107,6 +109,7 @@ for (n in 1:2) {
   interval = 0.95
   interval <- qnorm(1 - (1 - interval)/2)
   prediction_times <- data.frame(date = as_date(time_window[1]:time_window[2]))
+  prediction <- c()
   prediction <- predict(fit, newdata = prediction_times, type = "link", se.fit = TRUE)
   prediction.lower <- plogis(prediction$fit - interval*prediction$se.fit)
   prediction.upper <- plogis(prediction$fit + interval*prediction$se.fit)
@@ -124,4 +127,5 @@ for (n in 1:2) {
 }
 plot_logistic_fit <- ggarrange(plot_alpha_logistic_fit, plot_delta_logistic_fit,
                                ncol = 2, nrow = 1)
-ggsave(plot_logistic_fit, filename = paste0("./data/figures/SF2_",format(Sys.time(), "%Y-%m-%d"), ".png"), height = 4, width = 8,  bg = "transparent")
+ggsave(plot_logistic_fit, filename = paste0("./data/figures/SF2.png"), height = 4, width = 8,  bg = "transparent")
+ggsave(plot_logistic_fit, filename = paste0("./data/figures/SF2.pdf"), height = 4, width = 8,  bg = "transparent")

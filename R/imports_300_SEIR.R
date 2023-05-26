@@ -7,7 +7,7 @@
 #' ---
 
 
-imports_003_SEIR <- function(imports, variant){ # variant == "alpha" or "delta"
+imports_300_SEIR <- function(imports, variant){ # variant == "alpha" or "delta"
   popsize <- unique(cov_ch$pop[cov_ch$geoRegion=="CH"])
   if(variant=="alpha"){shift <- 3}
   if(variant=="delta"){shift <- 2}

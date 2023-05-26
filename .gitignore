@@ -9,7 +9,8 @@
 .Ruserdata
 
 *backups
-
+manuscript/
+beforeRevision/
 
 # Example code in package build process
 *-Ex.R

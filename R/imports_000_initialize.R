@@ -14,39 +14,29 @@ library(reshape2)
 library(ggplot2)
 library(RColorBrewer)
 library(grid)
+library(gridExtra)
 library(ggpubr)
-library(nnet)
 library(splines)
-library(effects)
 library(deSolve)
-library(bbmle)
 library(SimDesign)
-library(MCMCglmm)
-library(dplyr)
+library(bbmle)
 library(MASS)
 library(RDS)
 library(doParallel)
 library(foreach)
+library(cowplot)
+library(MCMCglmm)
+library(RDS)
 
 
 # Set seed
 set.seed(60321)
 
 
-#' Paths
-path_function = "R/"
-path_saveoutput = "output/"
-
-
-#' Add custom functions to env
-files_functions = list.files(file.path(path_function),full.names = TRUE, include.dirs = TRUE)
-files_functions = files_functions[!grepl(pattern = "000|backup|old",files_functions)]
-sapply(files_functions[1:5], source)
-rm(files_functions)
-
 #' Graphics
 theme_set(theme_bw())
 col_9 <- (brewer.pal(9,"Set1"))
+col_8 <- (brewer.pal(8,"Dark2"))
 qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector <- unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 yscaling <- function(l) {

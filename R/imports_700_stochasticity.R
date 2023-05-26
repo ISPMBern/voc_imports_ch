@@ -122,7 +122,7 @@ for (i in 1:3) {
   max_yaxis <-400
   incidence_seeds_plot <- ggplot()+
     theme_minimal()+
-    scale_y_continuous(labels = yscaling_log)+
+    scale_y_continuous(labels = yscaling)+
     geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_95,ymax=up_95), fill=col_l, alpha=0.4)+
     geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_50,ymax=up_50), fill=col_l, alpha=0.4)+
     geom_line(data=models_output_CI, aes( x=(date), y=median), col=col_l)+#[models_output$variable%in%c(20001:20011),]
@@ -134,6 +134,9 @@ for (i in 1:3) {
   if(i==2){incidence_seeds10_plot <- incidence_seeds_plot+ labs(tab="10 imports")}
   if(i==3){incidence_seeds100_plot <- incidence_seeds_plot+ labs(tab="100 imports")}
 }
+incidence_seeds_plot <- ggarrange(incidence_seeds1_plot, incidence_seeds10_plot,incidence_seeds100_plot,
+                                  ncol = 3, nrow = 1,labels = c("","",""))
+
 for (i in 1:3) {
   output_inc <- models_output_cuminc[((i-1)*n_sim+1):(i*n_sim)]
   output_inc <- as.data.frame(do.call(rbind, lapply(output_inc, `length<-`, max(lengths(output_inc)))))
@@ -151,7 +154,7 @@ for (i in 1:3) {
   max_yaxis <-5000
   cumincidence_seeds_plot <- ggplot()+
     theme_minimal()+
-    scale_y_continuous(labels = yscaling_log)+
+    scale_y_continuous(labels = yscaling)+
     geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_95,ymax=up_95), fill=col_l, alpha=0.4)+
     geom_ribbon(data=models_output_CI,aes(x=date, ymin=low_50,ymax=up_50), fill=col_l, alpha=0.4)+
     geom_line(data=models_output_CI, aes( x=(date), y=median), col=col_l)+#[models_output$variable%in%c(20001:20011),]
@@ -162,6 +165,9 @@ for (i in 1:3) {
   if(i==2){incidence_seeds10_plot <- cumincidence_seeds_plot+ labs(tab="10 imports")}
   if(i==3){incidence_seeds100_plot <- cumincidence_seeds_plot+ labs(tab="100 imports")}
 }
+cumincidence_seeds_plot <- ggarrange(incidence_seeds1_plot, incidence_seeds10_plot,incidence_seeds100_plot,
+                                     ncol = 3, nrow = 1,labels = c("","",""))
+
 stochastic_model_outputs_variation$seeds <-  factor(stochastic_model_outputs_variation$seeds, levels=c("1", "10", "100"))
 variation_cumincidence_sd <- ggplot()+
   theme_minimal()+
@@ -183,9 +189,9 @@ variation_cumincidence_range <- ggplot()+
   labs( x = "Cumulative incidence", y =bquote("Variation in days (range)"))
 
 
-stochastic_seeds_plot <- ggarrange(incidence_seeds_plot, cumincidence_seeds_plot,variation_cumincidence_sd,variation_cumincidence_range,
-                                     ncol = 1, nrow = 4,labels = c("A","B","C", "D"))
-ggsave(stochastic_seeds_plot, filename = paste0("./data/figures/Figure5_",format(Sys.time(), "%Y-%m-%d"), ".png"), height =16, width = 10,  bg = "transparent")
+stochastic_seeds_plot <- ggarrange(incidence_seeds_plot, cumincidence_seeds_plot,variation_cumincidence_sd,
+                                     ncol = 1, nrow = 3,labels = c("A","B","C"))
+ggsave(stochastic_seeds_plot, filename = paste0("./data/figures/SF6.png"), height =14, width = 10,  bg = "transparent")
 
 
 
